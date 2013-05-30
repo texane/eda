@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 import PIL.Image
+import PIL.PSDraw
 import sys
+import os
 
 
 # retrieve circuit borders
@@ -48,7 +50,43 @@ def crop_borders(im):
         minx = min(scanx(pix, y, w, +1), minx)
         maxx = max(scanx(pix, y, w, -1), maxx)
 
-    return im.crop((minx, miny, maxx, maxy))
+    croped_im = im.crop((minx, miny, maxx, maxy))
+    croped_im.info['dpi'] = im.info['dpi']
+    return croped_im
+
+
+# print image format
+
+def print_im_format(im):
+    wsizes = (210, 148, 105, 0)
+    hsizes = (297, 210, 148, 0)
+
+    w = (im.size[0] * 25.4) / 800.0
+    h = (im.size[1] * 25.4) / 800.0
+
+    for i in range(0, len(wsizes)):
+        if w >= wsizes[i]:
+            break
+
+    for j in range(0, len(hsizes)):
+        if h >= hsizes[j]:
+            break
+
+    if j < i: i = j
+
+    print('dim: ' + str(w) + ' x ' + str(h))
+    print('fmt: a' + str(4 + i))
+
+    return
+
+
+# save to ps
+
+def save_ps(im, path):
+    im.save('/tmp/__eda.png', dpi=im.info['dpi'])
+    os.system('convert /tmp/__eda.png ' + path)
+    return
+
 
 # main
 
@@ -62,7 +100,7 @@ if (len(sys.argv) > 3): top_bot_name = sys.argv[3]
 top_im = crop_borders(PIL.Image.open(top_name))
 bot_im = crop_borders(PIL.Image.open(bot_name))
 
-top_dpi = 800.0
+top_dpi = top_im.info['dpi'][0]
 top_size = top_im.size
 top_mode = top_im.mode
 bot_size = bot_im.size
@@ -81,13 +119,24 @@ top_im = top_im.transpose(PIL.Image.FLIP_LEFT_RIGHT)
 # bot_im = bot_im.transpose(PIL.FLIP_LEFT_RIGHT)
 
 # create top bottom image after transpose
-band_inches = 0.155 / 2.54
+border_inches = 0.8 / 2.54
+border_pixels = border_inches * top_dpi
+band_inches = 0.153 / 2.54
 band_pixels = band_inches * top_dpi
-top_bot_size = (int(top_size[0] * 2 + band_pixels), top_size[1])
+top_bot_size = (int(top_size[0] * 2 + border_pixels + band_pixels + 4), int(border_pixels + top_size[1] + 4))
 top_bot_im = PIL.Image.new('1', top_bot_size)
+top_bot_im.info['dpi'] = (top_dpi, top_dpi)
 
 # paste top into top_bot
-top_bot_im.paste(top_im, (0, 0), None)
-top_bot_im.paste(bot_im, (int(top_size[0] + band_pixels), 0))
+top_bot_im.paste(top_im, (int(border_pixels), int(border_pixels)), None)
+top_bot_im.paste(bot_im, (int(border_pixels + top_size[0] + band_pixels), int(border_pixels)))
 
-top_bot_im.save(top_bot_name)
+if (top_bot_im.size[0] > top_bot_im.size[1]):
+    top_bot_im = top_bot_im.rotate(90)
+
+if (top_bot_name[-3:] == '.ps'):
+    save_ps(top_bot_im, top_bot_name)
+else:
+    top_bot_im.save(top_bot_name, dpi=(top_dpi, top_dpi))
+
+print_im_format(top_bot_im)
